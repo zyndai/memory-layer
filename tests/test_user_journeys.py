@@ -392,14 +392,13 @@ async def test_user_publishes_an_html_page_and_gets_a_live_url():
     pool = MagicMock()
     pool.fetchrow = AsyncMock(return_value={"supabase_user_id": "suid-xyz"})
 
-    fake_pages = MagicMock()
-    fake_pages.create_page = AsyncMock(return_value={
+    create_page_mock = AsyncMock(return_value={
         "success": True, "url": "https://zynd.io/p/abc123", "slug": "abc123", "title": "Test",
     })
 
     # when — she asks to publish some HTML as a shareable page
     with patch("app.mcp_http._get_pool", AsyncMock(return_value=pool)), \
-         patch.dict("sys.modules", {"app.services.pages_agent": fake_pages}):
+         patch("app.services.pages_agent.create_page", create_page_mock):
         result = await m.publish_page(
             content="<h1>Hello</h1>", title="Test", format="html", uid=uid,
         )
@@ -407,23 +406,22 @@ async def test_user_publishes_an_html_page_and_gets_a_live_url():
     # then — she gets a live public URL back
     assert result["success"] is True
     assert result["url"] == "https://zynd.io/p/abc123"
-    fake_pages.create_page.assert_awaited_once()
+    create_page_mock.assert_awaited_once()
 
 
 async def test_anonymous_user_publishes_an_expiring_page():
     # given — no signed-in user (uid resolves to None via _uid_opt)
-    fake_pages = MagicMock()
-    fake_pages.create_page = AsyncMock(return_value={
+    create_page_mock = AsyncMock(return_value={
         "success": True, "url": "https://zynd.io/p/temp42", "slug": "temp42", "title": "Temp",
     })
 
     # when — an anonymous caller publishes a page
-    with patch.dict("sys.modules", {"app.services.pages_agent": fake_pages}):
+    with patch("app.services.pages_agent.create_page", create_page_mock):
         result = await m.publish_page(content="<h1>Hi</h1>", title="Temp", uid=None)
 
     # then — the page is hosted, and it was created with the anonymous 5-hour TTL
     assert result["success"] is True
-    _, kwargs = fake_pages.create_page.call_args
+    _, kwargs = create_page_mock.call_args
     assert kwargs.get("expires_in_hours") == m.PUBLIC_PAGE_TTL_HOURS
 
 

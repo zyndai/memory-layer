@@ -71,7 +71,7 @@ async def test_concurrent_pool_init_creates_exactly_one_pool():
         return pool
 
     # when — 10 coroutines all call _get_pool() simultaneously
-    with patch("app.mcp_http.asyncpg.create_pool", side_effect=_fake_create_pool) as cp:
+    with patch("app.mcp_http.asyncpg.create_pool", new_callable=AsyncMock, side_effect=_fake_create_pool) as cp:
         results = await asyncio.gather(*[m._get_pool() for _ in range(10)])
 
     # then — create_pool ran exactly once and everyone got the SAME pool object
@@ -90,7 +90,7 @@ async def test_second_pool_call_reuses_cached_pool_without_locking():
     async def _fake_create_pool(*args, **kwargs):
         return sentinel
 
-    with patch("app.mcp_http.asyncpg.create_pool", side_effect=_fake_create_pool) as cp:
+    with patch("app.mcp_http.asyncpg.create_pool", new_callable=AsyncMock, side_effect=_fake_create_pool) as cp:
         first = await m._get_pool()
         # when — many more callers arrive after init
         again = await asyncio.gather(*[m._get_pool() for _ in range(20)])
@@ -112,7 +112,7 @@ async def test_concurrent_arq_init_creates_exactly_one_pool():
         return MagicMock(name="arq-pool")
 
     # when — 10 coroutines race to lazily create the arq pool
-    with patch("app.mcp_http.create_pool", side_effect=_fake_create) as cp:
+    with patch("app.mcp_http.create_pool", new_callable=AsyncMock, side_effect=_fake_create) as cp:
         results = await asyncio.gather(*[m._get_arq() for _ in range(10)])
 
     # then — exactly one arq pool exists and is shared by all callers

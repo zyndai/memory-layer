@@ -13,7 +13,7 @@ DEFAULT_TIMEOUT = 12.0
 def _notion_request(method: str, path: str, user_id: str, payload: dict = None) -> dict:
     tokens = get_tokens(user_id=user_id, provider="notion")
     if not tokens:
-        raise ValueError("Notion not connected. Please connect your Notion account.")
+        return {"success": False, "error": "Notion not connected. Please connect your Notion account."}
 
     headers = {
         "Authorization": f"Bearer {tokens['access_token']}",

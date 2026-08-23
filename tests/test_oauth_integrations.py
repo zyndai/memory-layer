@@ -9,22 +9,16 @@ Covers the paths a user actually hits:
   - /connect password signup + sign-in flow
 
 Design notes / findings:
-  - Every "not connected" tool degrades GRACEFULLY: the credential helpers
-    (get_google_creds / twitter._get_client / linkedin._get_headers /
-    notion._notion_request) raise ValueError when get_tokens() returns None, but
-    each tool wraps its body in try/except and returns {"success": False,
-    "error": ...}. So the observable contract is a DICT, not an exception. These
-    tests assert that contract. If any tool is ever changed to let the ValueError
-    escape, the corresponding test here will fail (it awaits the tool and asserts
-    a dict) — which is the intended regression guard.
+  - Notion/_notion_request returns {"success": False, "error": ...} when no tokens
+    (not a ValueError). All other tools follow the same pattern.
   - LinkedIn DM send/read are hard-coded placeholders (Partner Program gated);
-    they return an error dict WITHOUT consulting tokens, so they are "not
-    connected"-safe by construction.
+    they return an error dict WITHOUT consulting tokens.
   - Google/Twitter/LinkedIn/Notion tools import `get_tokens` by symbol, so each is
     patched in its own module namespace (app.tools.<mod>.get_tokens), not in
     app.services.token_store.
 """
 import json
+from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
@@ -391,13 +385,18 @@ async def test_list_my_pages_empty_for_new_user():
 
 # ── Group 8: Connect flow (password auth) ───────────────────────────────────────
 
-def _connect_client(mock_pool):
+@asynccontextmanager
+async def _connect_client(mock_pool):
     """ASGI client over app.main with app.db.get_pool patched to a mock pool.
-    Group 8 exercises the /connect HTTP surface without a live Postgres."""
+    Group 8 exercises the /connect HTTP surface without a live Postgres.
+    Patch must remain active for the duration of each request, hence the
+    asynccontextmanager wrapper — the plain `with patch(...)` form exits before
+    the ASGI transport makes its first DB call."""
     with patch("app.connect.get_pool", return_value=mock_pool):
         from app.main import app
         transport = httpx.ASGITransport(app=app)
-        return httpx.AsyncClient(transport=transport, base_url="http://test")
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as c:
+            yield c
 
 
 async def test_connect_creates_new_user_and_issues_token():
