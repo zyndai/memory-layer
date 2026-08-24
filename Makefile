@@ -7,9 +7,9 @@ SSHCMD   := ssh -i $(SSH_KEY) -o StrictHostKeyChecking=no
 
 deploy:             ## rsync app+sql to prod, apply schema (idempotent), rebuild, health-check
 	rsync -az -e "$(SSHCMD)" --exclude .git --exclude __pycache__ --exclude .venv --exclude .env \
-		app/ ubuntu@$(EC2_HOST):/home/ubuntu/zynd/app/
-	rsync -az -e "$(SSHCMD)" sql/ ubuntu@$(EC2_HOST):/home/ubuntu/zynd/sql/
-	$(SSHCMD) ubuntu@$(EC2_HOST) 'cd ~/zynd && \
+		app/ ubuntu@$(EC2_HOST):/home/ubuntu/memory-layer/app/
+	rsync -az -e "$(SSHCMD)" sql/ ubuntu@$(EC2_HOST):/home/ubuntu/memory-layer/sql/
+	$(SSHCMD) ubuntu@$(EC2_HOST) 'cd ~/memory-layer && \
 		sudo docker compose -f docker-compose.prod.yml exec -T postgres psql -U zynd -d zynd -v ON_ERROR_STOP=1 < sql/schema.sql && \
 		sudo docker compose -f docker-compose.prod.yml up -d --build api worker mcp'
 	@echo "deployed — health:" && sleep 6 && curl -fsS https://api.zynd.ai/health && echo
