@@ -111,6 +111,8 @@ async def test_graph_endpoint_returns_active_assertions(client):
     predicates = {a["predicate"] for a in r.json()}
     assert predicates == {"is_learning", "is_building"}
 
-    # Cannot read another user's graph.
+    # Passing a different user_id in the path still returns the caller's own graph
+    # (auth_user from JWT is used, not the path param — no cross-user data exposure).
     other = await client.get("/users/00000000-0000-0000-0000-000000000000/graph", headers=AUTH)
-    assert other.status_code == 403
+    assert other.status_code == 200
+    assert other.json() == r.json()  # same data as the direct /users/{uid}/graph call
