@@ -12,7 +12,7 @@ from fastapi.responses import HTMLResponse
 from app.auth import issue_personal_token, verify_access_claims, verify_access_token
 from app.config import settings
 from app.db import close_pool, get_pool, init_pool
-from app.models import AssertionView, ConnectRequest, ContextRequest, DeclareRequest, FactRef, IngestRequest, IngestResponse, PublishPageRequest, SocialLinks, UpdatePageRequest
+from app.models import AssertionView, ConnectRequest, ContextRequest, DeclareBatchRequest, DeclareRequest, FactRef, IngestRequest, IngestResponse, PublishPageRequest, SocialLinks, UpdatePageRequest
 from app.services.ingest import ingest_turns
 from app.connect import router as connect_router
 from app.docs import router as docs_router
@@ -263,9 +263,8 @@ async def my_context(k: int = 20, user_id: str = Depends(current_user)) -> dict:
 
 @app.get("/users/{user_id}/graph", response_model=list[AssertionView])
 async def get_graph(user_id: str, auth_user: str = Depends(current_user)) -> list[AssertionView]:
-    if user_id != auth_user:
-        raise HTTPException(status_code=403, detail="can only read your own graph")
-    return await _active_graph(user_id)
+    # Use auth_user (resolved internal ID) — path param may be a Supabase UUID.
+    return await _active_graph(auth_user)
 
 
 @app.get("/me/matches")
@@ -407,6 +406,25 @@ async def declare_findability(req: DeclareRequest, user_id: str = Depends(curren
     return {"status": "declared", "predicate": req.predicate, "value": req.value}
 
 
+@app.post("/me/findability/declare-batch")
+async def declare_findability_batch(req: DeclareBatchRequest, user_id: str = Depends(current_user)) -> dict:
+    """Declare multiple public findability facts in one call (used by @zynd/ctx sync).
+
+    Processes each declaration independently — invalid items are skipped with a reason,
+    valid ones are written. Never aborts the whole batch on a single bad item.
+    """
+    from app.services.findability import declare
+    declared: list[dict] = []
+    skipped: list[dict] = []
+    for item in req.declarations:
+        try:
+            await declare(get_pool(), user_id, item.predicate, item.value)
+            declared.append({"predicate": item.predicate, "value": item.value})
+        except ValueError as exc:
+            skipped.append({"predicate": item.predicate, "value": item.value, "reason": str(exc)})
+    return {"status": "ok", "declared": declared, "skipped": skipped}
+
+
 @app.post("/me/memory/declare")
 async def declare_memory_fact(req: DeclareRequest, user_id: str = Depends(current_user)) -> dict:
     """User explicitly adds a PRIVATE memory fact (stays private, never matched)."""
@@ -431,11 +449,14 @@ async def export_context(user_id: str, auth_user: str = Depends(current_user)) -
 async def context_packet(
     user_id: str, req: ContextRequest, auth_user: str = Depends(current_user)
 ) -> list[dict]:
-    """Top-K assertions relevant to a topic — the MCP slice over HTTP (brief §11.2)."""
-    if user_id != auth_user:
-        raise HTTPException(status_code=403, detail="can only query your own context")
+    """Top-K assertions relevant to a topic — the MCP slice over HTTP (brief §11.2).
+
+    `user_id` in the path may be a Supabase UUID; `current_user` translates it
+    to the internal memory-layer ID. Always query with `auth_user` so Supabase-UUID
+    callers (agent-persona) hit the same namespace as MCP/ChatGPT callers.
+    """
     from app.services.export import context_slice
-    return await context_slice(get_pool(), user_id, req.topic, req.k)
+    return await context_slice(get_pool(), auth_user, req.topic, req.k)
 
 
 # ── Shareable page hosting ──────────────────────────────────────────────
