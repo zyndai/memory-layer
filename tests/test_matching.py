@@ -127,8 +127,9 @@ async def test_match_endpoint_auth_and_validation(client):
     assert ok.status_code == 200
     assert isinstance(ok.json(), list)
 
-    forbidden = await client.get("/match/00000000-0000-0000-0000-000000000000", headers=AUTH)
-    assert forbidden.status_code == 403
+    # Passing a different user_id uses auth_user from JWT — returns caller's own matches, not 403.
+    other_path = await client.get("/match/00000000-0000-0000-0000-000000000000", headers=AUTH)
+    assert other_path.status_code == 200
 
     bad_cluster = await client.get(f"/match/{dev_id}?cluster_type=bogus", headers=AUTH)
     assert bad_cluster.status_code == 200   # v2: unknown cluster falls back to full findability card

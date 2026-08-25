@@ -97,5 +97,6 @@ async def test_export_and_context_endpoints(client):
     assert ctx.status_code == 200
     assert isinstance(ctx.json(), list)
 
-    forbidden = await client.get("/export/00000000-0000-0000-0000-000000000000", headers=AUTH)
-    assert forbidden.status_code == 403
+    # Passing a different user_id uses auth_user from JWT — returns caller's own export, not 403.
+    other_path = await client.get("/export/00000000-0000-0000-0000-000000000000", headers=AUTH)
+    assert other_path.status_code == 200

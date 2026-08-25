@@ -354,11 +354,9 @@ async def get_match(
     auth_user: str = Depends(current_user),
 ) -> list[dict]:
     """Top-N users whose `cluster_type` vector is nearest to this user's."""
-    if user_id != auth_user:
-        raise HTTPException(status_code=403, detail="can only query your own matches")
     from app.services.matching import match_users
     try:
-        return await match_users(get_pool(), user_id, cluster_type, limit)
+        return await match_users(get_pool(), auth_user, cluster_type, limit)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -439,10 +437,8 @@ async def declare_memory_fact(req: DeclareRequest, user_id: str = Depends(curren
 @app.get("/export/{user_id}")
 async def export_context(user_id: str, auth_user: str = Depends(current_user)) -> dict:
     """Full active context as a portable JSON-LD packet (brief §11.1)."""
-    if user_id != auth_user:
-        raise HTTPException(status_code=403, detail="can only export your own context")
     from app.services.export import build_jsonld_export
-    return await build_jsonld_export(get_pool(), user_id)
+    return await build_jsonld_export(get_pool(), auth_user)
 
 
 @app.post("/context/{user_id}")
