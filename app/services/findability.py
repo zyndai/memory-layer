@@ -38,6 +38,7 @@ PRIVATE_DECLARE_ENTITY_TYPE: dict[str, str] = {
     "is_working_on": "project_venture",
     "is_creating": "artifact_creative",
     "wants_to_preserve": "concept_topic",
+    "is_interested_in": "concept_topic",
     "is_learning": "skill_domain",
     "has_expertise_in": "skill_domain",
     "has_skill": "skill_technical",
@@ -171,13 +172,25 @@ async def declare(pool: asyncpg.Pool, user_id: str, predicate: str, value: str) 
     await recompute_user_embeddings(pool, user_id)
 
 
-async def declare_private(pool: asyncpg.Pool, user_id: str, predicate: str, value: str) -> None:
-    """User explicitly adds a PRIVATE memory fact (never matched/public)."""
+async def declare_private(
+    pool: asyncpg.Pool,
+    user_id: str,
+    predicate: str,
+    value: str,
+    source_system: str = "user_confirmed",
+) -> None:
+    """User explicitly adds a PRIVATE memory fact (never matched/public).
+
+    `source_system` tags provenance — "user_confirmed" for hand-declared
+    facts, or the originating system ("twitter", "linkedin", "github", ...)
+    when an integration declares on the user's behalf.
+    """
     if predicate not in PRIVATE_DECLARE_ENTITY_TYPE:
         raise ValueError(f"{predicate!r} is not declarable as private memory")
     value = (value or "").strip()
     if not value:
         raise ValueError("value is required")
+    source_system = (source_system or "user_confirmed").strip() or "user_confirmed"
 
     entity_type = PRIVATE_DECLARE_ENTITY_TYPE[predicate]
     async with pool.acquire() as conn:
@@ -197,7 +210,7 @@ async def declare_private(pool: asyncpg.Pool, user_id: str, predicate: str, valu
                     """INSERT INTO assertions
                          (user_id, predicate, object_entity_id, confidence, source_system,
                           source, is_public, decay_fn)
-                       VALUES ($1, $2, $3, $4, 'user_confirmed', 'declared', false, $5)""",
+                       VALUES ($1, $2, $3, $4, $5, 'declared', false, $6)""",
                     user_id, predicate, entity_id, PRIVATE_DECLARED_CONFIDENCE,
-                    decay_fn_for(predicate))
+                    source_system, decay_fn_for(predicate))
     # Private memory is not matched, so no recompute_user_embeddings is needed.

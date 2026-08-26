@@ -368,10 +368,14 @@ async def declare_findability(req: DeclareRequest, user_id: str = Depends(curren
 
 @app.post("/me/memory/declare")
 async def declare_memory_fact(req: DeclareRequest, user_id: str = Depends(current_user)) -> dict:
-    """User explicitly adds a PRIVATE memory fact (stays private, never matched)."""
+    """User explicitly adds a PRIVATE memory fact (stays private, never matched).
+
+    `source_system` tags the provenance (e.g. "twitter", "linkedin", "github",
+    "mcp"); it defaults to "user_confirmed" for hand-declared facts.
+    """
     from app.services.findability import declare_private
     try:
-        await declare_private(get_pool(), user_id, req.predicate, req.value)
+        await declare_private(get_pool(), user_id, req.predicate, req.value, req.source_system)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {"status": "declared", "predicate": req.predicate, "value": req.value}

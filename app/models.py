@@ -72,6 +72,9 @@ class FactRef(BaseModel):
 class DeclareRequest(BaseModel):
     predicate: str = Field(min_length=1)
     value: str = Field(min_length=1)
+    # Provenance tag for the assertion (e.g. "twitter", "linkedin", "github",
+    # "mcp"). Defaults to user_confirmed for facts the user declared by hand.
+    source_system: str = "user_confirmed"
 
 
 class ConnectRequest(BaseModel):
